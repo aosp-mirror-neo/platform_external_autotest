@@ -51,7 +51,6 @@ load('//metadata/tests/provision.star', define_provision = 'define_tests')
 load('//metadata/tests/debugd.star', define_debugd = 'define_tests')
 load('//metadata/tests/rlz.star', define_rlz = 'define_tests')
 load('//metadata/tests/moblab.star', define_moblab = 'define_tests')
-load('//metadata/tests/crosperf.star', define_crosperf = 'define_tests')
 load('//metadata/tests/stress.star', define_stress = 'define_tests')
 load('//metadata/tests/uncategorized.star', define_uncategorized = 'define_tests')
 
@@ -103,7 +102,6 @@ def define_tests():
     tests += define_debugd()
     tests += define_rlz()
     tests += define_moblab()
-    tests += define_crosperf()
     tests += define_stress()
     tests += define_uncategorized()
     return tests

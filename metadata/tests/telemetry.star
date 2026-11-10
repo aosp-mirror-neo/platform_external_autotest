@@ -20,11 +20,6 @@ def define_tests():
             main_package = 'autotest_lib.client.site_tests.telemetry_AFDOGenerateClient.telemetry_AFDOGenerateClient',
         ),
         test_common.define_test(
-            'telemetry/Crosperf',
-            suites = [],
-            main_package = '',
-        ),
-        test_common.define_test(
             'telemetry/Sanity',
             suites = ['bvt-perbuild', 'smoke'],
             main_package = 'autotest_lib.client.site_tests.telemetry_Check.telemetry_Check',
