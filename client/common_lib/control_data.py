@@ -93,11 +93,6 @@ class ControlData(object):
         # Defaults
         self.path = path
         self.dependencies = set()
-        # Whether this test needs the Telemetry framework present on the DUT.
-        # Deliberately not expressed via DEPENDENCIES: entries there are matched
-        # against DUT labels for scheduling, and Telemetry is a payload we
-        # install on demand rather than a property of the hardware.
-        self.require_telemetry = False
         self.metadata = {}
         # TODO(jrbarnette): This should be removed once outside
         # code that uses can be changed.
@@ -243,10 +238,6 @@ class ControlData(object):
 
     def set_dependencies(self, val):
         self._set_set('dependencies', val)
-
-
-    def set_require_telemetry(self, val):
-        self._set_bool('require_telemetry', val)
 
 
     def set_metadata(self, val):

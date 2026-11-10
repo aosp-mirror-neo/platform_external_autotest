@@ -14,7 +14,6 @@ METADATA = {
 
 TIME = "SHORT"
 TEST_TYPE = "client"
-REQUIRE_TELEMETRY = True
 PY_VERSION = 3
 
 DOC = """

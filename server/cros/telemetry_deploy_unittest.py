@@ -118,15 +118,6 @@ class FakeHost(object):
 # verification.
 _ABSENT = telemetry_deploy.TELEMETRY_DUT_SRC + '/tools/perf/run_benchmark'
 
-# Matches only the minimal-only presence probe in is_telemetry_on_dut() so a
-# scripted failure there does not match _verify_staged_tree() or
-# _ensure_python_path().
-# pylint: disable=protected-access
-_MINIMAL_ABSENT = "test -e '%s/%s'" % (
-        telemetry_deploy.TELEMETRY_MINIMAL_DUT_SRC,
-        telemetry_deploy._TELEMETRY_REL_PYTHON_PATH)
-# pylint: enable=protected-access
-
 # Exact commands, so ordering assertions cannot latch onto the wrong rm or .pth
 # check.
 _RM_LIVE_TREE = "rm -rf '%s'" % telemetry_deploy.TELEMETRY_DUT_DIR
@@ -236,41 +227,6 @@ class IsTelemetryOnDutTest(unittest.TestCase):
                         telemetry_deploy.is_telemetry_on_dut(
                                 host, rootfs_prefix=usr))
 
-                # Minimal-only check: satisfied by /usr/local/telemetry-minimal
-                # when /usr/local/telemetry is absent, while full check remains
-                # False because tools/perf/run_benchmark is not on the DUT.
-                minimal_src = os.path.join(usr, 'local', 'telemetry-minimal',
-                                           'src')
-                minimal_sentinel = os.path.join(
-                        minimal_src,
-                        telemetry_deploy._TELEMETRY_REL_PYTHON_PATH)
-                os.makedirs(os.path.dirname(minimal_sentinel), exist_ok=True)
-                with open(minimal_sentinel, 'w', encoding='utf-8') as f:
-                    f.write('x\n')
-                for rel in telemetry_deploy._FULL_SENTINEL_PATHS:
-                    os.unlink(os.path.join(src, rel))
-                with mock.patch.object(telemetry_deploy,
-                                       'TELEMETRY_MINIMAL_DUT_SRC',
-                                       new=minimal_src):
-                    self.assertFalse(
-                            telemetry_deploy.is_telemetry_on_dut(
-                                    host, rootfs_prefix=usr))
-                    self.assertTrue(
-                            telemetry_deploy.is_telemetry_on_dut(
-                                    host, rootfs_prefix=usr,
-                                    minimal_only=True))
-                    os.unlink(minimal_sentinel)
-                    self.assertFalse(
-                            telemetry_deploy.is_telemetry_on_dut(
-                                    host, rootfs_prefix=usr,
-                                    minimal_only=True))
-                    with open(sentinel, 'w', encoding='utf-8') as f:
-                        f.write('x\n')
-                    self.assertTrue(
-                            telemetry_deploy.is_telemetry_on_dut(
-                                    host, rootfs_prefix=usr,
-                                    minimal_only=True))
-
     # pylint: enable=protected-access
 
 
@@ -379,24 +335,6 @@ class EnsureTest(unittest.TestCase):
         self.assertIn(telemetry_deploy._TELEMETRY_MINIMAL_PYTHON_PATH, cmd)
 
     # pylint: enable=protected-access
-
-    def test_minimal_only_noop_when_minimal_present(self, _enabled, dep_url):
-        host = FakeHost(failures={_ABSENT: 1})
-        self.assertFalse(
-                telemetry_deploy.ensure_telemetry_on_dut(host,
-                                                         minimal_only=True))
-        self.assertTrue(host.ran(telemetry_deploy.TELEMETRY_MINIMAL_DUT_SRC))
-        self.assertFalse(host.ran('curl'))
-        self.assertFalse(dep_url.called)
-
-    def test_minimal_only_deploys_when_minimal_absent(self, _enabled,
-                                                      _dep_url):
-        host = FakeHost(failures={_MINIMAL_ABSENT: 1})
-        self.assertTrue(
-                telemetry_deploy.ensure_telemetry_on_dut(host,
-                                                         minimal_only=True))
-        self.assertTrue(host.ran('curl'))
-        self.assertTrue(host.ran('tar x'))
 
     def test_force_deploys_over_existing_tree(self, _enabled, _dep_url):
         host = FakeHost()
@@ -509,24 +447,6 @@ class KillSwitchTest(unittest.TestCase):
         with self.assertRaises(telemetry_deploy.TelemetryDeployError):
             telemetry_deploy.ensure_telemetry_on_dut(host)
         self.assertFalse(any('rm -rf' in cmd for cmd in host.commands))
-
-    def test_disabled_and_minimal_present_is_a_quiet_noop(self, dep_url):
-        host = FakeHost(failures={_ABSENT: 1})
-        self.assertFalse(
-                telemetry_deploy.ensure_telemetry_on_dut(host,
-                                                         minimal_only=True))
-        self.assertTrue(host.ran(telemetry_deploy.TELEMETRY_MINIMAL_DUT_SRC))
-        self.assertFalse(host.ran('curl'))
-        self.assertFalse(dep_url.called)
-
-    def test_disabled_and_minimal_absent_raises(self, _dep_url):
-        host = FakeHost(failures={_MINIMAL_ABSENT: 1})
-        with self.assertRaises(telemetry_deploy.TelemetryDeployError) as cm:
-            telemetry_deploy.ensure_telemetry_on_dut(host, minimal_only=True)
-        # pylint: disable=protected-access
-        self.assertIn(telemetry_deploy._ENABLE_CONFIG_KEY, str(cm.exception))
-        # pylint: enable=protected-access
-        self.assertFalse(host.ran('curl'))
 
 
 @mock.patch.object(telemetry_deploy, '_dep_url', return_value='http://cache/x')
@@ -949,9 +869,10 @@ class CleanupTest(unittest.TestCase):
                 self.assertFalse(
                         telemetry_deploy.is_telemetry_on_dut(
                                 host, rootfs_prefix=usr))
-                self.assertTrue(
-                        telemetry_deploy.is_telemetry_on_dut(
-                                host, rootfs_prefix=usr, minimal_only=True))
+                with open(rootfs_pth, encoding='utf-8') as f:
+                    self.assertIn(
+                            telemetry_deploy._TELEMETRY_MINIMAL_PYTHON_PATH,
+                            f.read())
 
     def test_never_raises(self):
         """Cleanup runs while an exception may already be propagating."""

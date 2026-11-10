@@ -33,9 +33,7 @@ Catapult runtime subset (~8.4 MiB) at /usr/local/telemetry-minimal. Consumer A
 deploys the full per-build dep tarball (published inside autotest_packages.tar)
 on demand into /usr/local/telemetry, with telemetry.pth listing the full tree
 before telemetry-minimal so a deployed tree wins on sys.path and the subset
-remains active after cleanup_telemetry_on_dut(). Meanwhile,
-server/cros/telemetry_dependency.py passes minimal_only=True as a transitional
-fallback for images predating /usr/local/telemetry-minimal.
+remains active after cleanup_telemetry_on_dut().
 
 Every failure raised out of this module is a TelemetryDeployError; _try_run() is
 the single place where a host exception is converted into one, so callers can
@@ -118,13 +116,11 @@ TELEMETRY_DEP_TARBALLS = tuple(
 # telemetry ebuild does at image build time.
 _TARBALL_ROOT_DIR = 'test_src'
 
-# Paths (relative to a full Telemetry src/ directory) that must exist for a
-# tree to count as a usable full installation (minimal_only=False and
-# _verify_staged_tree()). Checking these rather than just the top-level
+# Paths (relative to TELEMETRY_DUT_SRC) that must exist for a tree to count as
+# a usable full installation (unlike TELEMETRY_MINIMAL_DUT_SRC, which omits
+# tools/perf/run_benchmark). Checking these rather than just the top-level
 # directory means a partially deleted or partially extracted tree is detected
-# and repaired instead of being silently trusted. Note that minimal_only=True
-# checks only _TELEMETRY_REL_PYTHON_PATH because TELEMETRY_MINIMAL_DUT_SRC
-# intentionally omits tools/perf/run_benchmark.
+# and repaired instead of being silently trusted.
 _FULL_SENTINEL_PATHS = (
         _TELEMETRY_REL_PYTHON_PATH,
         'tools/perf/run_benchmark',
@@ -364,8 +360,8 @@ def _paths_state(host, base, paths, present):
     return None if result is None else result.exit_status == 0
 
 
-def is_telemetry_on_dut(host, rootfs_prefix=_USR_PREFIX, minimal_only=False):
-    """Returns whether a usable Telemetry tree and .pth are on the DUT.
+def is_telemetry_on_dut(host, rootfs_prefix=_USR_PREFIX):
+    """Returns whether the full Telemetry tree and .pth are on the DUT.
 
     An unreachable DUT counts as "not present": the deploy that follows will
     fail against the same DUT and report the connection problem properly, which
@@ -375,34 +371,17 @@ def is_telemetry_on_dut(host, rootfs_prefix=_USR_PREFIX, minimal_only=False):
         host: Autotest host object for the DUT.
         rootfs_prefix: Prefix containing rootfs lib*/python3.*/site-packages
             directories (overridden in unit tests to run against a temp dir).
-        minimal_only: If True, accept the pre-installed minimal Catapult subset
-            at /usr/local/telemetry-minimal (needed by client tests that only
-            import telemetry.*) in addition to a full /usr/local/telemetry
-            installation.
 
     Returns:
-        True if the required Telemetry sentinel path(s) (_FULL_SENTINEL_PATHS by
-        default, or _TELEMETRY_REL_PYTHON_PATH when minimal_only=True) and a
-        matching rootfs or stateful telemetry.pth exist on the DUT.
+        True if all _FULL_SENTINEL_PATHS and a matching rootfs or stateful
+        telemetry.pth exist on the DUT.
     """
     prefix = rootfs_prefix.rstrip('/')
     if not prefix:
         return False
-    if minimal_only:
-        # Minimal subset omits tools/perf/run_benchmark; only Catapult's
-        # telemetry/ package directory is required.
-        sentinel_checks = '{ test -e %s || test -e %s; }' % (
-                _quoted(
-                        os.path.join(TELEMETRY_MINIMAL_DUT_SRC,
-                                     _TELEMETRY_REL_PYTHON_PATH)),
-                _quoted(
-                        os.path.join(TELEMETRY_DUT_SRC,
-                                     _TELEMETRY_REL_PYTHON_PATH)),
-        )
-    else:
-        sentinel_checks = ' && '.join(
-                'test -e %s' % _quoted(os.path.join(TELEMETRY_DUT_SRC, path))
-                for path in _FULL_SENTINEL_PATHS)
+    sentinel_checks = ' && '.join(
+            'test -e %s' % _quoted(os.path.join(TELEMETRY_DUT_SRC, path))
+            for path in _FULL_SENTINEL_PATHS)
     # Group the .pth loop in braces after '&&' so missing sentinels
     # short-circuit cleanly on images that ship rootfs telemetry.pth without
     # the tree, while catching trees stranded without .pth across drone skew.
@@ -916,14 +895,12 @@ def _remove_scratch(host):
                      description='Removing Telemetry scratch directories')
 
 
-def _handle_kill_switch(host, force, minimal_only=False):
+def _handle_kill_switch(host, force):
     """Acts on the kill switch, if it is off.
 
     Args:
         host: Autotest host object for the DUT.
         force: Whether the caller asked for an unconditional deploy.
-        minimal_only: Whether the pre-installed minimal Catapult subset at
-            /usr/local/telemetry-minimal satisfies the caller.
 
     Returns:
         True if deployment is disabled and the DUT already has Telemetry, so
@@ -940,7 +917,7 @@ def _handle_kill_switch(host, force, minimal_only=False):
     # Only worth a round trip on this path: with the switch off, whether the
     # DUT already has Telemetry is the difference between "nothing to do" and
     # "this test cannot possibly work".
-    if not force and is_telemetry_on_dut(host, minimal_only=minimal_only):
+    if not force and is_telemetry_on_dut(host):
         logging.debug(
                 'On-demand Telemetry deployment is disabled via [CROS] %s, but '
                 '%s already has Telemetry.', _ENABLE_CONFIG_KEY, host.hostname)
@@ -957,14 +934,11 @@ def ensure_telemetry_on_dut(host,
                             build=None,
                             cache_endpoint=None,
                             bucket=None,
-                            force=False,
-                            minimal_only=False):
-    """Ensures a Telemetry tree usable by the caller is on the DUT.
+                            force=False):
+    """Ensures the full Telemetry tree is available at /usr/local/telemetry.
 
-    Requires the full framework at /usr/local/telemetry by default, or also
-    accepts the pre-installed subset at /usr/local/telemetry-minimal when
-    minimal_only=True. When a sufficient tree and telemetry.pth are already
-    present, this returns immediately without modifying the DUT.
+    When the full framework and telemetry.pth are already present, this returns
+    immediately without modifying the DUT.
 
     Ordering note: any pre-existing tree is deleted before the new one is
     extracted, because the partition does not have room for both. That deletion
@@ -988,9 +962,6 @@ def ensure_telemetry_on_dut(host,
             deploy path while images still ship Telemetry, and to replace an
             image's Telemetry when a newer Chrome has been side-loaded onto the
             DUT.
-        minimal_only: If True, treat the pre-installed minimal Catapult subset
-            at /usr/local/telemetry-minimal as sufficient and skip deploying the
-            full archive when it is present.
 
     Returns:
         True if this call deployed Telemetry, and the caller is therefore
@@ -1001,10 +972,10 @@ def ensure_telemetry_on_dut(host,
         TelemetryDeployError: If Telemetry is needed but cannot be made
             available, including when deployment is disabled by config.
     """
-    if _handle_kill_switch(host, force, minimal_only=minimal_only):
+    if _handle_kill_switch(host, force):
         return False
 
-    if not force and is_telemetry_on_dut(host, minimal_only=minimal_only):
+    if not force and is_telemetry_on_dut(host):
         logging.debug('Telemetry is already present on %s; nothing to deploy.',
                       host.hostname)
         return False

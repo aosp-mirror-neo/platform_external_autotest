@@ -17,6 +17,5 @@ METADATA = {
 }
 ATTRIBUTES = ("")
 TEST_TYPE = "client"
-REQUIRE_TELEMETRY = True
 
 job.run_test('power_LowMemorySuspend')

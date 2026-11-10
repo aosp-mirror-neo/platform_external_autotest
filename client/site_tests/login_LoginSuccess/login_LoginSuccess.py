@@ -17,9 +17,6 @@ from autotest_lib.client.cros import asan
 from autotest_lib.client.cros import tpm
 
 
-REQUIRE_TELEMETRY = True
-
-
 class login_LoginSuccess(test.test):
     """Sign in using Telemetry and validate system state."""
     version = 1
